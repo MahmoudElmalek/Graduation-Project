@@ -1,19 +1,29 @@
 import threading
 import time
-
 import cv2
 import numpy as np
 import torch
 import yaml
 from torchvision import transforms
+import asyncio
 
 from face_alignment.alignment import norm_crop
+
 from face_detection.scrfd.detector import SCRFD
-from face_detection.yolov5_face.detector import Yolov5Face
+# from face_detection.yolov5_face.detector import Yolov5Face
+
 from face_recognition.arcface.model import iresnet_inference
 from face_recognition.arcface.utils import compare_encodings, read_features
+
 from face_tracking.tracker.byte_tracker import BYTETracker
 from face_tracking.tracker.visualize import plot_tracking
+
+from Flask.id import fetch_chosen_id,frameIDs,SearchingCond
+from Flask.car import Rotate,Attack
+from Flask.pantilt import PanTiltMoving
+from Flask.mobilefeed import MobileFeed
+
+from Flask.notification import SendNotifications
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,11 +37,17 @@ recognizer = iresnet_inference(
     model_name="r100", path="face_recognition/arcface/weights/arcface_r100.pth", device=device
 )
 
+
+id_face_mapping = {}
+name_id_mapping = {}
+real_time_ids={}
+
+
+chosen_id_bymobile=None # remember to set this to none at the end, would be sent to mobile first so he can chooose from the current ids, so it avoids choosing unavailable id and making an error.
+
+
 # Load precomputed face features and names
 images_names, images_embs = read_features(feature_path="./datasets/face_features/feature")
-
-# Mapping of face IDs to names
-id_face_mapping = {}
 
 # Data mapping for tracking information
 data_mapping = {
@@ -59,6 +75,35 @@ def load_config(file_name):
         except yaml.YAMLError as exc:
             print(exc)
 
+# coding to measure distance 
+KNOWN_DISTANCE = 60 # centimeter
+# width of face in the real world or Object Plane
+KNOWN_WIDTH = 15  # centimeter
+
+# focal length finder function
+def focal_length(measured_distance, real_width, width_in_rf_image):
+
+    focal_length_value = (width_in_rf_image * measured_distance) / real_width
+    return focal_length_value
+
+# distance estimation function
+def distance_finder(focal_length, real_face_width, face_width_in_frame):
+
+    distancee = (real_face_width * focal_length) / face_width_in_frame
+    return distancee
+
+# face detector function
+def Cal_Face_width(image):
+    face_width = 0
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    faces = cv2.CascadeClassifier("haarcascade_frontalface_alt.xml").detectMultiScale(gray_image, 1.3, 5)
+    for (x, y, h, w) in faces:
+        face_width = w
+    return face_width
+
+ref_image = cv2.imread("ref_image.png")
+ref_image_face_width = Cal_Face_width(ref_image)
+focal_length_found = focal_length(KNOWN_DISTANCE, KNOWN_WIDTH, ref_image_face_width)
 
 def process_tracking(frame, detector, tracker, args, frame_id, fps):
     """
@@ -75,41 +120,45 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
     Returns:
         numpy.ndarray: The processed tracking image.
     """
+
     # Face detection and tracking
     outputs, img_info, bboxes, landmarks = detector.detect_tracking(image=frame)
+
+    if outputs is None or len(outputs) == 0:
+        return img_info["raw_img"]
 
     tracking_tlwhs = []
     tracking_ids = []
     tracking_scores = []
     tracking_bboxes = []
 
-    if outputs is not None:
-        online_targets = tracker.update(
-            outputs, [img_info["height"], img_info["width"]], (128, 128)
-        )
+    height = img_info["height"]
+    width= img_info["width"]
+    tlwh=None
+    # print(height,width)
 
-        for i in range(len(online_targets)):
-            t = online_targets[i]
-            tlwh = t.tlwh
-            tid = t.track_id
-            vertical = tlwh[2] / tlwh[3] > args["aspect_ratio_thresh"]
-            if tlwh[2] * tlwh[3] > args["min_box_area"] and not vertical:
-                x1, y1, w, h = tlwh
-                tracking_bboxes.append([x1, y1, x1 + w, y1 + h])
-                tracking_tlwhs.append(tlwh)
-                tracking_ids.append(tid)
-                tracking_scores.append(t.score)
+    online_targets = tracker.update(outputs, [img_info["height"], img_info["width"]], (128, 128))
+    for t in online_targets:
+        tlwh = t.tlwh
+        tid = t.track_id
+        vertical = tlwh[2] / tlwh[3] > args["aspect_ratio_thresh"]
+        if tlwh[2] * tlwh[3] > args["min_box_area"] and not vertical:
+            x1, y1, w, h = tlwh
+            tracking_bboxes.append([x1, y1, x1 + w, y1 + h])
+            tracking_tlwhs.append(tlwh)
+            tracking_scores.append(t.score)
+            tracking_ids.append(tid)      
 
-        tracking_image = plot_tracking(
-            img_info["raw_img"],
-            tracking_tlwhs,
-            tracking_ids,
-            names=id_face_mapping,
-            frame_id=frame_id + 1,
-            fps=fps,
-        )
-    else:
-        tracking_image = img_info["raw_img"]
+    tracking_image = plot_tracking(
+        img_info["raw_img"],
+        tracking_tlwhs,
+        tracking_ids,
+        cards=id_face_mapping,
+        frame_id=frame_id + 1,
+        fps=fps,
+    )
+    # else:
+    #     tracking_image = img_info["raw_img"]
 
     data_mapping["raw_image"] = img_info["raw_img"]
     data_mapping["detection_bboxes"] = bboxes
@@ -117,6 +166,7 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
     data_mapping["tracking_ids"] = tracking_ids
     data_mapping["tracking_bboxes"] = tracking_bboxes
 
+    # print(id_face_mapping,name_id_mapping)
     return tracking_image
 
 
@@ -216,6 +266,7 @@ def tracking(detector, args):
         detector: The face detector.
         args (dict): Tracking configuration parameters.
     """
+    
     # Initialize variables for measuring frame rate
     start_time = time.time_ns()
     frame_count = 0
@@ -226,9 +277,13 @@ def tracking(detector, args):
     frame_id = 0
 
     cap = cv2.VideoCapture(0)
+    # img = cv2.imread('111.png')
+    
+    # cap = cv2.VideoCapture(url_feed)
 
     while True:
         _, img = cap.read()
+        # img=cv2.flip(img, 0)
 
         tracking_image = process_tracking(img, detector, tracker, args, frame_id, fps)
 
@@ -241,13 +296,24 @@ def tracking(detector, args):
 
         cv2.imshow("Face Recognition", tracking_image)
 
+        # asyncio.run(MobileFeed(tracking_image))
+
         # Check for user exit input
         ch = cv2.waitKey(1)
         if ch == 27 or ch == ord("q") or ch == ord("Q"):
             break
+        
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 def recognize():
+
+    AngleX=0
+    AngleY=70
+    general_id=None
+    # asyncio.run(PanTiltMoving(0,70))
+
     """Face recognition in a separate thread."""
     while True:
         raw_image = data_mapping["raw_image"]
@@ -255,7 +321,8 @@ def recognize():
         detection_bboxes = data_mapping["detection_bboxes"]
         tracking_ids = data_mapping["tracking_ids"]
         tracking_bboxes = data_mapping["tracking_bboxes"]
-
+        
+        is_known_face=False
         for i in range(len(tracking_bboxes)):
             for j in range(len(detection_bboxes)):
                 mapping_score = mapping_bbox(box1=tracking_bboxes[i], box2=detection_bboxes[j])
@@ -265,19 +332,153 @@ def recognize():
                     score, name = recognition(face_image=face_alignment)
                     if name is not None:
                         if score < 0.25:
-                            caption = "UN_KNOWN"
+                            caption = [f"UN_KNOWN_{tracking_ids[i]}",'non','UN_KNOWN']
                         else:
-                            caption = f"{name}:{score:.2f}"
+                            caption =[name,round(score*100,2),'KNOWN']
+                    
+                        if caption[0] in name_id_mapping:  # Check if the name already has an ID
+                            face_id = name_id_mapping[caption[0]]
+                        else:  # If the name is new, assign a new ID
+                            name_id_mapping[caption[0]] = len(name_id_mapping) + 1
+                            face_id = name_id_mapping[caption[0]]
 
-                    id_face_mapping[tracking_ids[i]] = caption
+                        face_width_in_frame = tracking_bboxes[i][2] - tracking_bboxes[i][0]
+                        face_height_in_frame = tracking_bboxes[i][3] - tracking_bboxes[i][1]
+
+                        Distance = distance_finder(focal_length_found, KNOWN_WIDTH, face_width_in_frame)
+
+                        face_centerX= tracking_bboxes[i][0] + (face_width_in_frame/2)
+                        face_centerY = tracking_bboxes[i][1] +(face_height_in_frame/2)
+
+                        deltaX=face_centerX-(640//2)
+                        deltaY=face_centerY-(480//2)
+
+                        AngleX += deltaX // 45
+                        AngleY += deltaY // 30
+
+                        AngleX = max(-90, min(90, AngleX))
+                        AngleY = max(5, min(90, AngleY))
+
+                        id_face_mapping[tracking_ids[i]]=[caption[0], caption[1], face_id, round(Distance,2), int(AngleX), int(AngleY),caption[2]]
+                        # print(id_face_mapping)
+
+                        # Priority choosing for known faces only
+                        min_id=float('inf')
+                        for trackid in tracking_ids:
+                            real_time_ids[trackid] = id_face_mapping.get(trackid, ['Unknown', 'Unknown', float('inf'), 0, 0, 0, 'Unknown'])
+                            if  real_time_ids[trackid][6]!='UN_KNOWN' and real_time_ids[trackid][2]<min_id :
+                                min_id=real_time_ids[trackid][2]
+                                general_id=trackid
+                                is_known_face=True
+
+                        print(real_time_ids)
+
+                        current_ids = [data[2] for data in real_time_ids.values()]
+                        print("Current IDs in frame: ", current_ids)
+
+                        # Post current_ids to Flask Station
+                        # asyncio.run(frameIDs(current_ids))
+
+                        if is_known_face and chosen_id_bymobile is None:
+                            xTrack=real_time_ids[general_id][4]
+                            yTrack=real_time_ids[general_id][5]
+                            zTrack=real_time_ids[general_id][3]
+                            # asyncio.run(Attack(xTrack,yTrack,zTrack))
+                            # asyncio.run(PanTiltMoving(xTrack,yTrack))
+                            print('min_id: ',min_id,', general_id: ',general_id)
+
+
+                        if chosen_id_bymobile:  # Remember to reset the chosen id after finishing the attack (make it none at the end of attak function)
+                            chosen_general_id = None
+                            for track_id, real_time_data in real_time_ids.items():
+                                if chosen_id_bymobile == real_time_data[2]:
+                                    chosen_general_id = track_id
+                                    break
+
+                            if chosen_general_id is not None:
+                                xTrack = real_time_ids[chosen_general_id][4]
+                                yTrack = real_time_ids[chosen_general_id][5]
+                                zTrack = real_time_ids[chosen_general_id][3]
+                                # asyncio.run(Attack(xTrack, yTrack, zTrack))
+                                # asyncio.run(PanTiltMoving(xTrack, yTrack))
+                                print('chosen_id_bymobile: ',chosen_id_bymobile,', chosen_general_id: ', chosen_general_id)
+                            else:
+                                print(f"Chosen ID {chosen_id_bymobile} not found in real_time_ids")
+                                
+                        print("-----------------------------------------")
 
                     detection_bboxes = np.delete(detection_bboxes, j, axis=0)
                     detection_landmarks = np.delete(detection_landmarks, j, axis=0)
+                    real_time_ids.clear()
 
                     break
 
-        if tracking_bboxes == []:
-            print("Waiting for a person...")
+        # if tracking_bboxes == [] or SearchingCond: # make it at a cond. of user asking (for known faces)
+        if SearchingCond:
+            # asyncio.run(SearchingAlgorithm())
+            # print("Waiting for a person...")
+            pass
+
+    # cv2.destroyAllWindows()
+
+
+async def SearchingAlgorithm(): # need to be edited
+    print('Start Process of Searching')
+    while True:
+            # await asyncio.sleep(2)
+            # if data_mapping["tracking_bboxes"] != []: # if there are faces
+            #             return
+            # print('No faces for 2 seconds')
+
+            # await asyncio.sleep(2)
+            # if data_mapping["tracking_bboxes"] != []: # if there are faces
+            #             return
+            # print('No faces for another 2 seconds')
+
+            await asyncio.sleep(1)
+
+            print("Start Searching")
+            pan=-90
+            tilt=100
+            print('pan -90')
+            await PanTiltMoving(pan,tilt)
+            await asyncio.sleep(1)
+
+            while pan<90:
+                if data_mapping["tracking_bboxes"] != []: # if there are faces
+                    print("face found and killed the algo")
+                    return
+                pan=pan+45 
+                print('pan++',pan)
+                await PanTiltMoving(pan,tilt)
+                await asyncio.sleep(1)
+            
+            await Rotate(180)
+            await asyncio.sleep(2)
+            
+            while pan>-90:
+                if data_mapping["tracking_bboxes"] != []: # if there are faces
+                    print("face found and killed the algo")
+                    return
+                pan=pan-45 
+                print('pan--',pan)
+                await PanTiltMoving(pan,tilt)
+                await asyncio.sleep(2)
+
+            await Rotate(180)
+
+            await asyncio.sleep(2)
+            print("Searching Process finished")
+            # Notify mob with message or send a character
+            #SendNotifications('f')
+            SearchingCond=False
+            return 
+
+
+async def continuously_fetch_chosen_id(interval=2):
+    while True:
+        await fetch_chosen_id()
+        await asyncio.sleep(interval)
 
 
 def main():
@@ -288,16 +489,21 @@ def main():
     # Start tracking thread
     thread_track = threading.Thread(
         target=tracking,
-        args=(
-            detector,
-            config_tracking,
-        ),
+        args=(detector,config_tracking,),
     )
     thread_track.start()
 
     # Start recognition thread
     thread_recognize = threading.Thread(target=recognize)
     thread_recognize.start()
+
+    # # Start the asyncio loop for continuous fetching of chosen ID
+    # loop = asyncio.get_event_loop()
+    # loop.create_task(continuously_fetch_chosen_id())
+
+    # # Run the loop in a separate thread
+    # loop_thread = threading.Thread(target=loop.run_forever)
+    # loop_thread.start()
 
 
 if __name__ == "__main__":
