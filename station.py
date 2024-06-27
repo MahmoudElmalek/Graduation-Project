@@ -1,11 +1,9 @@
 from flask import Flask, Response, request, jsonify
 import cv2
 import requests, time
-# import numpy as np
 import subprocess
 
-from Flask.endpoints import url_R_feed, url_R_pt, url_R_mv, url_R_op, url_mob_feed
-from add_persons import case
+from Flask.endpoints import url_R_feed, url_mob_feed, url_R_pt, url_R_mv, url_R_op
 
 
 app = Flask(__name__)
@@ -16,10 +14,11 @@ AiFeed= url_mob_feed # Station Flask Server, where AI post processed feed..
 current_video_url = RaspberryFeed
 cap = None
 chosen_id = None
+chosen_name=None
 frame_ids = None
 new_name=None
 new_id=None
-casee=case
+case=None
 
 class Controller:
     def __init__(self, script_name):
@@ -269,6 +268,14 @@ def chosen_idd():
     print("Received chosen ID:", chosen_id)
     return jsonify({"message": "Chosen ID received"}), 200
 
+@app.route('/chosen_name', methods=['POST'])
+def chosen_namee():
+    global chosen_name
+    data = request.json
+    chosen_id = data['name']
+    print("Received chosen Name:", chosen_id)
+    return jsonify({"message": "Chosen Name received"}), 200
+
 @app.route('/get_chosen_id', methods=['GET'])
 def get_chosen_id():
     if chosen_id is not None:
@@ -276,11 +283,21 @@ def get_chosen_id():
     else:
         return jsonify({"message": "No ID received yet"}), 404
 
+
+@app.route('/notifyp', methods=['POST'])
+def notifyp():
+    global case # c,n,s
+    data = request.json
+    case = data['case']
+    print("Received char:", case)
+    return jsonify({"message": "Chosen char"}), 200
+
+
 @app.route('/notify', methods=['GET'])
 def notification():
-    global casee  # c,n,s
-    if casee is not None:
-        return jsonify({"case": casee}), 200
+    global case  
+    if case is not None:
+        return jsonify({"case": case}), 200
     else:
         return jsonify({"message": "No notifications received yet"}), 404
 

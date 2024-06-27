@@ -12,7 +12,7 @@ from face_detection.yolov5_face.detector import Yolov5Face
 from face_recognition.arcface.model import iresnet_inference
 from face_recognition.arcface.utils import read_features
 from recognize import PC
-from station import new_id,new_name
+# from station import new_id,new_name
 from Flask.endpoints import url_station_video_feed
 from Flask.notification import SendNotifications
 
@@ -29,7 +29,6 @@ face_detector = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml')
 # is read from /get_new_person
 face_id= new_id
 face_name= new_name
-case=None
 
 
 print("\n [INFO] Initializing face capture. Look the camera and wait ...")

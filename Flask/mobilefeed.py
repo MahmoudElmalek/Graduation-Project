@@ -8,8 +8,9 @@ async def MobileFeed(feed):
         # Send the encoded frame as a POST request to the server
         response = requests.post(url_mob_feed, data=encoded_frame.tobytes(), headers={'Content-Type': 'image/jpeg'})
 
-        # if response.status_code == 200:
-        #     print('done sendnig frames')
-        # else:
-        #     print("Failed to send frames")
-        ## pass
+        if response.status_code == 200:
+            # print('done sendnig frames')
+            pass
+        else:
+            print("Failed to send frames")
+        # pass
