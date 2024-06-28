@@ -26,7 +26,7 @@ from Flask.mobilefeed import MobileFeed
 
 from Flask.notification import SendNotifications
 
-from Flask.endpoints import url_chs_id
+from Flask.endpoints import url_chs_id,url_chs_nm
 
 
 # Device configuration
@@ -317,6 +317,7 @@ def recognize():
     AngleY=70
     general_id=None
     global SearchingCond
+    global chosenName_bymobile
     # global chosen_id_bymobile
     global is_found
     # asyncio.run(PanTiltMoving(0,70))
@@ -328,7 +329,6 @@ def recognize():
         detection_bboxes = data_mapping["detection_bboxes"]
         tracking_ids = data_mapping["tracking_ids"]
         tracking_bboxes = data_mapping["tracking_bboxes"]
-        
         is_known_face=False
         for i in range(len(tracking_bboxes)):
             for j in range(len(detection_bboxes)):
@@ -413,11 +413,13 @@ def recognize():
                                 print(f"Chosen ID {chosen_id_bymobile} not found in real_time_ids")
 
                         elif chosenName_bymobile:  # Remember to reset the chosen name after finishing the search/attack (make it none at the end of attak function)
+                            print("searching for the name in data")
                             chosenName_general_id = None
                             for track_id, real_time_data in real_time_ids.items():
-                                if chosenName_bymobile == real_time_data[1]:
+                                if chosenName_bymobile == real_time_data[0]:
                                     chosenName_general_id = track_id
                                     is_found=True
+                                    print("is found (for loop)")
                                     break
 
                             if chosenName_general_id is not None:
@@ -429,7 +431,10 @@ def recognize():
                                 print('chosenName_bymobile: ',chosenName_bymobile,', chosenName_general_id: ', chosenName_general_id)
                             else:
                                 print(f"Chosen Name {chosenName_bymobile} not found in real_time_ids yet")
-                                
+
+                        # if SearchingCond and not is_found:
+                        #     asyncio.run(fetch_chosen_name())
+                        #     asyncio.run(SearchingAlgorithm())
                         print("-----------------------------------------")
 
                     detection_bboxes = np.delete(detection_bboxes, j, axis=0)
@@ -439,8 +444,8 @@ def recognize():
                     break
 
         # if tracking_bboxes == [] or SearchingCond: # make it at a cond. of user asking (for known faces)
-        if SearchingCond:
-            print("searching if part")
+        if SearchingCond and not is_found:
+            asyncio.run(fetch_chosen_name())
             asyncio.run(SearchingAlgorithm())
             # print("Waiting for a person...")
             # pass
@@ -453,31 +458,27 @@ async def SearchingAlgorithm(): # need to be edited
     global SearchingCond
     print('Start Process of Searching')
     while SearchingCond:
-
             await asyncio.sleep(1)
-
-            print("Start Searching")
             pan=-90
             tilt=100
-            print('pan -90')
+            print('pan= -90')
             # await PanTiltMoving(pan,tilt)
             await asyncio.sleep(1)
 
             while pan<90 and not is_found and SearchingCond:
                 
                 pan=pan+45 
-                print('pan++',pan)
+                print('pan++ =',pan)
                 # await PanTiltMoving(pan,tilt)
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
             if is_found:
                 print("is found")
-                is_found=False
+                # is_found=False
                 # Notify mob with message or send a character
                 #SendNotifications('f')
-                ResetName() # to stop if chosenName_bymobile
-                ResetID() # to stop fetching id and executing search algo.
-                SearchingCond=False # same above but a faster way
+                # ResetName() # to stop if chosenName_bymobile
+                # ResetID() # to stop fetching id / executing search algo.
                 return
 
             elif not SearchingCond:
@@ -489,19 +490,18 @@ async def SearchingAlgorithm(): # need to be edited
             
             while pan>-90 and not is_found and SearchingCond:
                 
-                pan=pan+45 
-                print('pan++',pan)
+                pan=pan-45 
+                print('pan-- =',pan)
                 # await PanTiltMoving(pan,tilt)
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
             if is_found:
                 print("is found")
-                is_found=False
+                # is_found=False
                 # Notify mob with message or send a character
                 #SendNotifications('f')
-                ResetName()
-                ResetID()
-                SearchingCond=False
+                # ResetName()
+                # ResetID()
                 return
             
             elif not SearchingCond:
@@ -514,13 +514,12 @@ async def SearchingAlgorithm(): # need to be edited
             print("Searching Process finished without finding any faces")
             # Notify mob with message or send a character
             #SendNotifications('f')
-            SearchingCond=False
-            ResetName()
-            ResetID()
+            await ResetName()
+            await ResetID()
             return 
 
 async def fetch_chosen_id():
-    global chosen_id_bymobile,SearchingCond
+    global chosen_id_bymobile,SearchingCond,is_found
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_chs_id) as response:
@@ -528,10 +527,11 @@ async def fetch_chosen_id():
                     data = await response.json()
                     if data['id']=='s':
                         SearchingCond=True
-                        print("Searching Cond.")
+                        # print("Searching Cond.")
                     else:
                         SearchingCond=False
                         chosen_id_bymobile = int(data['id'])
+                        is_found=False
                         if chosen_id_bymobile==0: chosen_id_bymobile=None #at the end of attack, ai would post (0) to /chosen_id
                         print("Fetched chosen ID:", chosen_id_bymobile)
                 else:
@@ -544,6 +544,25 @@ async def continuously_fetch_chosen_id(interval=2):
     while True:
         await fetch_chosen_id()
         await asyncio.sleep(interval)
+
+
+async def fetch_chosen_name():
+    global chosenName_bymobile,is_found
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url_chs_nm) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    chosenName_bymobile = data['name']
+                    is_found=False
+                    if chosenName_bymobile==0: chosenName_bymobile=None #at the end of attack, ai would post (0) to /chosen_name
+                    print("Fetched chosen Name:", chosenName_bymobile)
+                    return
+                else:
+                    print(f"Failed to fetch chosen Name: {response.status}")
+                    pass
+    except Exception as e:
+        print(f"Error fetching chosen Name: {e}")
 
 
 def main():

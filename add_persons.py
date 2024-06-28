@@ -11,9 +11,7 @@ from face_detection.scrfd.detector import SCRFD
 from face_detection.yolov5_face.detector import Yolov5Face
 from face_recognition.arcface.model import iresnet_inference
 from face_recognition.arcface.utils import read_features
-from recognize import PC
-# from station import new_id,new_name
-from Flask.endpoints import url_station_video_feed
+from Flask.endpoints import url_station_video_feed,url_get_person
 from Flask.notification import SendNotifications
 
 # this code to get images of new users 
@@ -27,9 +25,23 @@ face_detector = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml')
 # face_name=input('Enter user name: ')
 
 # is read from /get_new_person
-face_id= new_id
-face_name= new_name
+face_id= None
+face_name= None
 
+def get_new_person():
+    response = requests.get(url_get_person)
+    if response.status_code == 200:
+        data = response.json()
+        return data['id'], data['name']
+    else:
+        print("No new person received yet or error occurred.")
+        return None, None
+
+# Get new person details
+face_id, face_name = get_new_person()
+if face_id is None or face_name is None:
+    print("No new person to process. Exiting.")
+    exit()
 
 print("\n [INFO] Initializing face capture. Look the camera and wait ...")
 # Initialize individual sampling face count

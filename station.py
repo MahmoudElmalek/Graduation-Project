@@ -268,14 +268,6 @@ def chosen_idd():
     print("Received chosen ID:", chosen_id)
     return jsonify({"message": "Chosen ID received"}), 200
 
-@app.route('/chosen_name', methods=['POST'])
-def chosen_namee():
-    global chosen_name
-    data = request.json
-    chosen_id = data['name']
-    print("Received chosen Name:", chosen_id)
-    return jsonify({"message": "Chosen Name received"}), 200
-
 @app.route('/get_chosen_id', methods=['GET'])
 def get_chosen_id():
     if chosen_id is not None:
@@ -283,6 +275,20 @@ def get_chosen_id():
     else:
         return jsonify({"message": "No ID received yet"}), 404
 
+@app.route('/chosen_name', methods=['POST'])
+def chosen_namee():
+    global chosen_name
+    data = request.json
+    chosen_name = data['name']
+    print("Received chosen Name:", chosen_name)
+    return jsonify({"message": "Chosen Name received"}), 200
+
+@app.route('/get_chosen_name', methods=['GET'])
+def get_name():
+    if chosen_name is not None:
+        return jsonify({"name": chosen_name}), 200
+    else:
+        return jsonify({"message": "No name received yet"}), 404
 
 @app.route('/notifyp', methods=['POST'])
 def notifyp():
@@ -315,6 +321,15 @@ def add_person():
 
     print("Received NewPerson: ", new_id,': ',new_name)
     return jsonify({"message": "NewPerson received"}), 200
+
+@app.route('/get_new_person', methods=['GET'])
+def get_new_person():
+    global new_name, new_id
+    if new_name is not None and new_id is not None:
+        return jsonify({"id": new_id, "name": new_name}), 200
+    else:
+        return jsonify({"message": "No person received yet"}), 404
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=True)
