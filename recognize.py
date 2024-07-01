@@ -26,7 +26,7 @@ from Flask.mobilefeed import MobileFeed
 
 from Flask.notification import SendNotifications
 
-from Flask.endpoints import url_chs_id,url_chs_nm
+from Flask.endpoints import url_chs_id,url_chs_nm,url_R_feed
 
 
 # Device configuration
@@ -80,7 +80,7 @@ def load_config(file_name):
             print(exc)
 
 # coding to measure distance 
-KNOWN_DISTANCE = 60 # centimeter
+KNOWN_DISTANCE = 53 # centimeter
 # width of face in the real world or Object Plane
 KNOWN_WIDTH = 15  # centimeter
 
@@ -280,14 +280,14 @@ def tracking(detector, args):
     tracker = BYTETracker(args=args, frame_rate=30)
     frame_id = 0
 
-    cap = cv2.VideoCapture(0)
+    # cap = cv2.VideoCapture(0)
     # img = cv2.imread('111.png')
     
-    # cap = cv2.VideoCapture(url_feed)
+    cap = cv2.VideoCapture(url_R_feed)
 
     while True:
         _, img = cap.read()
-        # img=cv2.flip(img, 0)
+        img=cv2.flip(img, 0)
 
         tracking_image = process_tracking(img, detector, tracker, args, frame_id, fps)
 
@@ -320,7 +320,10 @@ def recognize():
     global chosenName_bymobile
     # global chosen_id_bymobile
     global is_found
-    # asyncio.run(PanTiltMoving(0,70))
+    asyncio.run(PanTiltMoving(0,60))
+    threshold = 7
+    prev_xTrack = None
+    prev_yTrack = None
 
     """Face recognition in a separate thread."""
     while True:
@@ -361,12 +364,12 @@ def recognize():
                         deltaY=face_centerY-(480//2)
 
                         AngleX += deltaX // 45
-                        AngleY += deltaY // 30
+                        AngleY += deltaY // 45
 
                         AngleX = max(-90, min(90, AngleX))
                         AngleY = max(5, min(90, AngleY))
 
-                        id_face_mapping[tracking_ids[i]]=[caption[0], caption[1], face_id, round(Distance,2), int(AngleX), int(AngleY),caption[2]]
+                        id_face_mapping[tracking_ids[i]]=[caption[0], caption[1], face_id, round(Distance,2), AngleX,AngleY,caption[2],deltaX,deltaY]
                         # print(id_face_mapping)
 
                         # Priority choosing for known faces only
@@ -390,12 +393,17 @@ def recognize():
                             xTrack=real_time_ids[general_id][4]
                             yTrack=real_time_ids[general_id][5]
                             zTrack=real_time_ids[general_id][3]
-                            # asyncio.run(Attack(xTrack,yTrack,zTrack))
+                            xdelt=real_time_ids[general_id][7]
+                            ydelt=real_time_ids[general_id][8]
+                            asyncio.run(Attack(xdelt,ydelt,zTrack))
                             # asyncio.run(PanTiltMoving(xTrack,yTrack))
-                            # print('min_id: ',min_id,', general_id: ',general_id)
+                            #Only call PanTiltMoving if the change exceeds the threshold
+                            # if prev_xTrack is None or prev_yTrack is None or abs(xTrack - prev_xTrack) > threshold or abs(yTrack - prev_yTrack) > threshold:
+                            #     asyncio.run(PanTiltMoving(xTrack, yTrack))
+                            #     prev_xTrack, prev_yTrack = xTrack, yTrack
+                            print('min_id: ',min_id,', general_id: ',general_id)
 
                         elif isinstance(chosen_id_bymobile, int): #as chosen id could be not none but 's'
-                        # if chosen_id_bymobile:  # Remember to reset the chosen id after finishing the attack (make it none at the end of attak function)
                             chosen_general_id = None
                             for track_id, real_time_data in real_time_ids.items():
                                 if chosen_id_bymobile == real_time_data[2]:
@@ -406,6 +414,9 @@ def recognize():
                                 xTrack = real_time_ids[chosen_general_id][4]
                                 yTrack = real_time_ids[chosen_general_id][5]
                                 zTrack = real_time_ids[chosen_general_id][3]
+                                xdelt = real_time_ids[chosen_general_id][7]
+                                ydelt = real_time_ids[chosen_general_id][8]
+                                # asyncio.run(Attack(xdelt,ydelt,zTrack))
                                 # asyncio.run(Attack(xTrack, yTrack, zTrack))
                                 # asyncio.run(PanTiltMoving(xTrack, yTrack))
                                 print('chosen_id_bymobile: ',chosen_id_bymobile,', chosen_general_id: ', chosen_general_id)
@@ -426,15 +437,15 @@ def recognize():
                                 xTrack = real_time_ids[chosenName_general_id][4]
                                 yTrack = real_time_ids[chosenName_general_id][5]
                                 zTrack = real_time_ids[chosenName_general_id][3]
+                                xdelt = real_time_ids[chosenName_general_id][7]
+                                ydelt = real_time_ids[chosenName_general_id][8]
+                                # asyncio.run(Attack(xdelt,ydelt,zTrack))
                                 # asyncio.run(Attack(xTrack, yTrack, zTrack))
                                 # asyncio.run(PanTiltMoving(xTrack, yTrack))
                                 print('chosenName_bymobile: ',chosenName_bymobile,', chosenName_general_id: ', chosenName_general_id)
                             else:
                                 print(f"Chosen Name {chosenName_bymobile} not found in real_time_ids yet")
 
-                        # if SearchingCond and not is_found:
-                        #     asyncio.run(fetch_chosen_name())
-                        #     asyncio.run(SearchingAlgorithm())
                         print("-----------------------------------------")
 
                     detection_bboxes = np.delete(detection_bboxes, j, axis=0)
@@ -443,7 +454,6 @@ def recognize():
 
                     break
 
-        # if tracking_bboxes == [] or SearchingCond: # make it at a cond. of user asking (for known faces)
         if SearchingCond and not is_found:
             asyncio.run(fetch_chosen_name())
             asyncio.run(SearchingAlgorithm())
@@ -460,39 +470,39 @@ async def SearchingAlgorithm(): # need to be edited
     while SearchingCond:
             await asyncio.sleep(1)
             pan=-90
-            tilt=100
+            tilt=45
             print('pan= -90')
-            # await PanTiltMoving(pan,tilt)
+            await PanTiltMoving(pan,tilt)
             await asyncio.sleep(1)
 
             while pan<90 and not is_found and SearchingCond:
                 
                 pan=pan+45 
                 print('pan++ =',pan)
-                # await PanTiltMoving(pan,tilt)
+                await PanTiltMoving(pan,tilt)
                 await asyncio.sleep(2)
 
             if is_found:
                 print("is found")
                 # is_found=False
                 # Notify mob with message or send a character
-                #SendNotifications('f')
+                # SendNotifications('f')
                 # ResetName() # to stop if chosenName_bymobile
-                # ResetID() # to stop fetching id / executing search algo.
+                ResetID() # to stop fetching id / executing search algo.
                 return
 
             elif not SearchingCond:
                 print("process is killed")
                 return
 
-            # await Rotate(180)
-            await asyncio.sleep(2)
+            await Rotate(180)
+            await asyncio.sleep(4)
             
             while pan>-90 and not is_found and SearchingCond:
                 
                 pan=pan-45 
                 print('pan-- =',pan)
-                # await PanTiltMoving(pan,tilt)
+                await PanTiltMoving(pan,tilt)
                 await asyncio.sleep(2)
 
             if is_found:
@@ -501,21 +511,23 @@ async def SearchingAlgorithm(): # need to be edited
                 # Notify mob with message or send a character
                 #SendNotifications('f')
                 # ResetName()
-                # ResetID()
+                ResetID()
                 return
             
             elif not SearchingCond:
                 print("process is killed")
                 return
 
-            # await Rotate(180)
+            await Rotate(180)
 
             await asyncio.sleep(2)
             print("Searching Process finished without finding any faces")
+            await PanTiltMoving(0,45)
             # Notify mob with message or send a character
             #SendNotifications('f')
-            await ResetName()
             await ResetID()
+            await ResetName()
+            SearchingCond=False
             return 
 
 async def fetch_chosen_id():
@@ -530,12 +542,14 @@ async def fetch_chosen_id():
                         # print("Searching Cond.")
                     else:
                         SearchingCond=False
-                        chosen_id_bymobile = int(data['id'])
                         is_found=False
-                        if chosen_id_bymobile==0: chosen_id_bymobile=None #at the end of attack, ai would post (0) to /chosen_id
-                        print("Fetched chosen ID:", chosen_id_bymobile)
+                        chosen_id_bymobile = int(data['id'])
+                        if chosen_id_bymobile==0:
+                            chosen_id_bymobile=None #at the end of attack, ai would post (0) to /chosen_id
+                        else:
+                            print("Fetched chosen ID:", chosen_id_bymobile)
                 else:
-                    print(f"Failed to fetch chosen ID: {response.status}")
+                    # print(f"Failed to fetch chosen ID: {response.status}")
                     pass
     except Exception as e:
         print(f"Error fetching chosen ID: {e}")
@@ -544,7 +558,6 @@ async def continuously_fetch_chosen_id(interval=2):
     while True:
         await fetch_chosen_id()
         await asyncio.sleep(interval)
-
 
 async def fetch_chosen_name():
     global chosenName_bymobile,is_found
@@ -559,11 +572,18 @@ async def fetch_chosen_name():
                     print("Fetched chosen Name:", chosenName_bymobile)
                     return
                 else:
-                    print(f"Failed to fetch chosen Name: {response.status}")
+                    # print(f"Failed to fetch chosen Name: {response.status}")
                     pass
     except Exception as e:
         print(f"Error fetching chosen Name: {e}")
 
+# def run_searching_algorithm():
+#     """
+#     Run the searching algorithm in an asyncio event loop within a separate thread.
+#     """
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
+#     loop.run_until_complete(SearchingAlgorithm())
 
 def main():
     """Main function to start face tracking and recognition threads."""
@@ -588,6 +608,13 @@ def main():
     # Run the loop in a separate thread
     loop_thread = threading.Thread(target=loop.run_forever)
     loop_thread.start()
+
+    # while thread_recognize.is_alive():
+    #     if SearchingCond and not is_found:
+    #         searching_thread = threading.Thread(target=run_searching_algorithm)
+    #         searching_thread.start()
+    #         searching_thread.join()
+    # thread_recognize.join()
 
 
 if __name__ == "__main__":
