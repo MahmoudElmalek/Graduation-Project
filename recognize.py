@@ -318,7 +318,6 @@ def recognize():
     general_id=None
     global SearchingCond
     global chosenName_bymobile
-    # global chosen_id_bymobile
     global is_found
     asyncio.run(PanTiltMoving(0,60))
     threshold = 7
