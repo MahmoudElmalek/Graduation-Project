@@ -1,5 +1,5 @@
 R=11
-PC=10
+PC=2
 
 # RaspberryPi Server
 url_R_feed =f"http://192.168.1.{R}:5000/video_feed" # Read raw feed from Raspberry

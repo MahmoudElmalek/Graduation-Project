@@ -1,5 +1,6 @@
 import aiohttp
 from Flask.endpoints import url_R_pt
+
 async def PanTiltMoving(pan_angle,tilt_angle):
     data = {"pan": pan_angle, "tilt": tilt_angle}
     async with aiohttp.ClientSession() as session:

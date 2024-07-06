@@ -14,11 +14,13 @@ from face_recognition.arcface.utils import read_features
 from Flask.endpoints import url_station_video_feed,url_get_person
 from Flask.notification import SendNotifications
 
+# print("head of code")
 # this code to get images of new users 
 cam = cv2.VideoCapture(url_station_video_feed)
 cam.set(3, 640) # set video width
 cam.set(4, 480) # set video height
 # task 1 to dectect full body
+# print("reading model")
 face_detector = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml')
 # For each person, enter one numeric face id
 # face_id = input('\n enter user id end press <return> ==>  ')
@@ -32,18 +34,20 @@ def get_new_person():
     response = requests.get(url_get_person)
     if response.status_code == 200:
         data = response.json()
-        return data['id'], data['name']
+        return int(data['id']), data['name']
     else:
         print("No new person received yet or error occurred.")
+        SendNotifications('e')
         return None, None
 
 # Get new person details
+print("getting name and id")
 face_id, face_name = get_new_person()
 if face_id is None or face_name is None:
     print("No new person to process. Exiting.")
     exit()
 
-print("\n [INFO] Initializing face capture. Look the camera and wait ...")
+print("Initializing face capture. Look the camera and wait ...")
 # Initialize individual sampling face count
 count = 0
 os.makedirs(f"datasets/new_persons/{face_name}")
@@ -66,12 +70,15 @@ while(True): # while opt=n
         cv2.imwrite(f"datasets/new_persons/{face_name}/User." + str(face_id) + '.' +  
                     str(count) + ".jpg", gray[y:y+h,x:x+w])
         cv2.imshow('image', img)
+        
     k = cv2.waitKey(100) & 0xff # Press 'ESC' for exiting video
     if k == 27:
         break
+
     elif count >= 50: # Take 50 face sample and stop video
          #send ch to notify mob to close camera()
-         SendNotifications('c')
+         SendNotifications('d')
+         print("done taking samples")
          break
 
 

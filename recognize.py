@@ -23,16 +23,18 @@ from Flask.id import frameIDs,SearchingCond,ResetID,ResetName
 from Flask.car import Rotate,Attack
 from Flask.pantilt import PanTiltMoving
 from Flask.mobilefeed import MobileFeed
-
 from Flask.notification import SendNotifications
-
 from Flask.endpoints import url_chs_id,url_chs_nm,url_R_feed
+# from test_frcnn import format_img,get_real_coordinates,bbox_threshold, model_classifier,model_rpn,model_classifier_only,Model,class_mapping,C
+# from keras_frcnn import roi_helpers
+# from keras import backend as K
+
 
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Face detector (choose one)
+# Face detector
 detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
 # detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
 
@@ -59,7 +61,7 @@ data_mapping = {
     "tracking_ids": [],
     "detection_bboxes": [],
     "detection_landmarks": [],
-    "tracking_bboxes": [],
+    "tracking_bboxes": []
 }
 
 
@@ -109,6 +111,7 @@ ref_image = cv2.imread("ref_image.png")
 ref_image_face_width = Cal_Face_width(ref_image)
 focal_length_found = focal_length(KNOWN_DISTANCE, KNOWN_WIDTH, ref_image_face_width)
 
+
 def process_tracking(frame, detector, tracker, args, frame_id, fps):
     """
     Process tracking for a frame.
@@ -127,6 +130,7 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
 
     # Face detection and tracking
     outputs, img_info, bboxes, landmarks = detector.detect_tracking(image=frame)
+
 
     if outputs is None or len(outputs) == 0:
         return img_info["raw_img"]
@@ -280,14 +284,14 @@ def tracking(detector, args):
     tracker = BYTETracker(args=args, frame_rate=30)
     frame_id = 0
 
-    # cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0)
     # img = cv2.imread('111.png')
     
-    cap = cv2.VideoCapture(url_R_feed)
+    # cap = cv2.VideoCapture(url_R_feed)
 
     while True:
         _, img = cap.read()
-        img=cv2.flip(img, 0)
+        # img=cv2.flip(img, 0)
 
         tracking_image = process_tracking(img, detector, tracker, args, frame_id, fps)
 
@@ -300,7 +304,7 @@ def tracking(detector, args):
 
         cv2.imshow("Face Recognition", tracking_image)
 
-        # asyncio.run(MobileFeed(tracking_image))
+        asyncio.run(MobileFeed(tracking_image))
 
         # Check for user exit input
         ch = cv2.waitKey(1)
@@ -316,10 +320,11 @@ def recognize():
     AngleX=0
     AngleY=70
     general_id=None
-    global SearchingCond
-    global chosenName_bymobile
+    # global SearchingCond
+    # global chosenName_bymobile
+    # global chosen_id_bymobile
     global is_found
-    asyncio.run(PanTiltMoving(0,60))
+    # asyncio.run(PanTiltMoving(0,60))
     threshold = 7
     prev_xTrack = None
     prev_yTrack = None
@@ -386,7 +391,7 @@ def recognize():
                         print("Current IDs in frame: ", current_ids)
 
                         # Post current_ids to Flask Station
-                        # asyncio.run(frameIDs(current_ids))
+                        asyncio.run(frameIDs(current_ids))
 
                         if is_known_face and chosen_id_bymobile is None:
                             xTrack=real_time_ids[general_id][4]
@@ -394,7 +399,7 @@ def recognize():
                             zTrack=real_time_ids[general_id][3]
                             xdelt=real_time_ids[general_id][7]
                             ydelt=real_time_ids[general_id][8]
-                            asyncio.run(Attack(xdelt,ydelt,zTrack))
+                            # asyncio.run(Attack(xdelt,ydelt,zTrack))
                             # asyncio.run(PanTiltMoving(xTrack,yTrack))
                             #Only call PanTiltMoving if the change exceeds the threshold
                             # if prev_xTrack is None or prev_yTrack is None or abs(xTrack - prev_xTrack) > threshold or abs(yTrack - prev_yTrack) > threshold:
@@ -426,10 +431,11 @@ def recognize():
                             print("searching for the name in data")
                             chosenName_general_id = None
                             for track_id, real_time_data in real_time_ids.items():
+                                print("looping")
                                 if chosenName_bymobile == real_time_data[0]:
                                     chosenName_general_id = track_id
                                     is_found=True
-                                    print("is found (for loop)")
+                                    print("is found (loop)")
                                     break
 
                             if chosenName_general_id is not None:
@@ -438,7 +444,7 @@ def recognize():
                                 zTrack = real_time_ids[chosenName_general_id][3]
                                 xdelt = real_time_ids[chosenName_general_id][7]
                                 ydelt = real_time_ids[chosenName_general_id][8]
-                                # asyncio.run(Attack(xdelt,ydelt,zTrack))
+                                # asyncio.run(Attack(xdelt,pan,zTrack))
                                 # asyncio.run(Attack(xTrack, yTrack, zTrack))
                                 # asyncio.run(PanTiltMoving(xTrack, yTrack))
                                 print('chosenName_bymobile: ',chosenName_bymobile,', chosenName_general_id: ', chosenName_general_id)
@@ -456,78 +462,70 @@ def recognize():
         if SearchingCond and not is_found:
             asyncio.run(fetch_chosen_name())
             asyncio.run(SearchingAlgorithm())
-            # print("Waiting for a person...")
-            # pass
+        # print("Waiting for a person...")
+        # pass
 
     # cv2.destroyAllWindows()
 
-
+pan=0
 async def SearchingAlgorithm(): # need to be edited
-    global is_found
-    global SearchingCond
+    # global is_found
+    # global SearchingCond
+    global pan
     print('Start Process of Searching')
     while SearchingCond:
-            await asyncio.sleep(1)
-            pan=-90
-            tilt=45
-            print('pan= -90')
-            await PanTiltMoving(pan,tilt)
-            await asyncio.sleep(1)
+        await asyncio.sleep(1)
+        pan=-90
+        tilt=45
+        print('pan= -90')
+        # await PanTiltMoving(pan,tilt)
+        await asyncio.sleep(1)
 
-            while pan<90 and not is_found and SearchingCond:
-                
-                pan=pan+45 
-                print('pan++ =',pan)
-                await PanTiltMoving(pan,tilt)
-                await asyncio.sleep(2)
-
-            if is_found:
-                print("is found")
-                # is_found=False
-                # Notify mob with message or send a character
-                # SendNotifications('f')
-                # ResetName() # to stop if chosenName_bymobile
-                ResetID() # to stop fetching id / executing search algo.
-                return
-
-            elif not SearchingCond:
-                print("process is killed")
-                return
-
-            await Rotate(180)
-            await asyncio.sleep(4)
-            
-            while pan>-90 and not is_found and SearchingCond:
-                
-                pan=pan-45 
-                print('pan-- =',pan)
-                await PanTiltMoving(pan,tilt)
-                await asyncio.sleep(2)
-
-            if is_found:
-                print("is found")
-                # is_found=False
-                # Notify mob with message or send a character
-                #SendNotifications('f')
-                # ResetName()
-                ResetID()
-                return
-            
-            elif not SearchingCond:
-                print("process is killed")
-                return
-
-            await Rotate(180)
-
+        while pan<90 and not is_found and SearchingCond:
+            pan=pan+45 
+            print('pan++ =',pan)
+            # await PanTiltMoving(pan,tilt)
             await asyncio.sleep(2)
-            print("Searching Process finished without finding any faces")
-            await PanTiltMoving(0,45)
-            # Notify mob with message or send a character
-            #SendNotifications('f')
-            await ResetID()
-            await ResetName()
-            SearchingCond=False
-            return 
+
+        if is_found:
+            print("is found")
+            await SendNotifications('f') # send notification
+            ResetID() # to stop fetching id / executing search algo.
+            return
+
+        elif not SearchingCond:
+            print("process is killed")
+            return
+
+        # await Rotate(180)
+        await asyncio.sleep(4)
+        
+        while pan>-90 and not is_found and SearchingCond:
+            pan=pan-45 
+            print('pan-- =',pan)
+            # await PanTiltMoving(pan,tilt)
+            await asyncio.sleep(2)
+
+        if is_found:
+            print("is found")
+            await SendNotifications('f') # send notification
+            ResetID()
+            return
+        
+        elif not SearchingCond:
+            print("process is killed")
+            return
+
+        # await Rotate(180)
+
+        await asyncio.sleep(2)
+        print("Searching Process finished without finding any faces")
+        # await PanTiltMoving(0,45)
+        await SendNotifications('x') # send notification
+        await ResetID()
+        await ResetName()
+        # SearchingCond=False
+        return 
 
 async def fetch_chosen_id():
     global chosen_id_bymobile,SearchingCond,is_found

@@ -2,6 +2,8 @@ from flask import Flask, Response, request, jsonify
 import cv2
 import requests, time
 import subprocess
+from PIL import Image
+import io
 
 from Flask.endpoints import url_R_feed, url_mob_feed, url_R_pt, url_R_mv, url_R_op
 
@@ -18,7 +20,7 @@ chosen_name=None
 frame_ids = None
 new_name=None
 new_id=None
-case=None
+case=None 
 
 class Controller:
     def __init__(self, script_name):
@@ -26,11 +28,11 @@ class Controller:
         self.process = None
 
     def start(self):
-        if self.process is None or self.process.poll() is not None:
+        # if self.process is None or self.process.poll() is not None:
             self.process = subprocess.Popen(["python", self.script_name])
             print(f"{self.script_name} process started.")
-        else:
-            print(f"{self.script_name} process is already running.")
+        # else:
+        #     print(f"{self.script_name} process is already running.")
 
     def stop(self):
         if self.process and self.process.poll() is None:
@@ -42,38 +44,46 @@ class Controller:
 
     def is_running(self):
         return self.process and self.process.poll() is None
-
+    
 # Create manager instances for both scripts
 recognize_manager = Controller("recognize.py")
-addperson_manager = Controller("add_person.py")
+addperson_manager = Controller("add_persons.py")
+# addperson_manager = Controller("test_running.py")
+
     
 def RunRecognize():
     if not recognize_manager.is_running():
-        print("Starting recognize.py now.")
+        print("Starting recognize now.")
         recognize_manager.start()
     else:
-        print("recognize.py is already running.")
+        recognize_manager.stop()
+        time.sleep(0.5)
+        recognize_manager.start()
+        print("recognize is restarted")
 
 def KillRecognize():
     if recognize_manager.is_running():
-        print("Stopping recognize.py now.")
+        print("Stopping recognize now.")
         recognize_manager.stop()
-        print("recognize.py stopped.")
+        print("recognize is stopped.")
     else:
         print("recognize.py is not running.")
 
 def RunAddPerson():
     if not addperson_manager.is_running():
-        print("Starting add_person.py now.")
+        print("Starting add_person now.")
         addperson_manager.start()
     else:
-        print("add_person.py is already running.")
+        addperson_manager.stop()
+        time.sleep(0.5)
+        addperson_manager.start()
+        print("NewPerson is restarted")
 
 def KillAddPerson():
     if addperson_manager.is_running():
         print("Stopping add_person.py now.")
         addperson_manager.stop()
-        print("add_person.py stopped.")
+        # print("add_person.py stopped.")
     else:
         print("addperson.py is not running.")
 
@@ -123,8 +133,32 @@ def video_feed():
 @app.route('/vid_back', methods=['POST']) # we post here feed, either from Ai output or mobile camera
 def vid_back(): 
     global latest_frame
-    latest_frame = request.data
-    return '', 204  # No Content
+    if opt =='a':
+        latest_frame = request.data
+        return '', 204  # No Content
+    else:
+        if 'file' not in request.files:
+            return 'No file part', 400
+
+        file = request.files['file']
+
+        # If no file is selected
+        if file.filename == '':
+            return 'No selected file', 400
+
+        try:
+            # Open the file as an image
+            image = Image.open(file)
+            
+            # Convert the image to JPEG format
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='JPEG')
+            latest_frame = img_byte_arr.getvalue()
+        except Exception as e:
+            print(f"Error processing image: {e}")
+            return 'Error processing image', 500
+
+        return '', 204 # No Content
 
 @app.route('/set_opt', methods=['POST'])
 def set_opt():
@@ -178,12 +212,12 @@ def set_opt():
         elif opt in ['m', 'g']:
             print("Releasing resources of Raspberry and switching to AI feed...")
 
-        release_resources()
+        # release_resources()
         time.sleep(2)  # to ensure the endpoint of Raspberry feed is released for the model to connect to..
         
         # Run Recognize
         RunRecognize()
-        time.sleep(15)  # Wait for 15 seconds till the AI model works and post its processed feed..
+        # time.sleep(120)  # Wait for 15 seconds till the AI model works and post its processed feed..
         current_video_url = AiFeed  
     
     opt = new_opt
@@ -234,7 +268,7 @@ def car_mv():
     rightspeed = data['r']
     leftspeed = data['l']
 
-    print(rightspeed)
+    print(rightspeed,leftspeed)
 
     # Forward the values to the Raspberry Pi server
     try:

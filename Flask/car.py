@@ -69,15 +69,59 @@ async def CarDirectOrders(order):
         print("Stopped")
         await CarMoving(1,101)
     
-async def Attack(x,y,z):
+async def Attack(x,pan,z):
     targeted=False
     # RealDistance=z*math.cos(math.radians(y - 90)) 
     RealDistance=z
     arrived=False
-
-
-    # rotate till x=0
     tolerance=15
+
+    if pan==0:
+        if x<tolerance:
+            #forward
+            pass
+        elif x>0:
+            #right
+            pass
+        elif x<0:
+            #left
+            pass
+
+    if pan==-45:
+        if x<0:
+            #right
+            pass
+        else:
+            #far right
+            pass
+
+    if pan==-90:
+        if x<0:
+            #far right
+            pass
+        else:
+            # rotate the car quartar turn (90 deg)
+            pass
+
+    if pan==45:
+        if x>0:
+            # left
+            pass
+        else:
+            # far left
+            pass
+
+    if pan ==90:
+        if x>0:
+            # far left
+            pass
+        else:
+            # rotate the car quartar turn (90 deg)
+            pass
+
+
+
+    # rotate till nearly x=0
     if abs(x)>= tolerance and RealDistance>70 :
 
         if x>0 :
