@@ -1,14 +1,48 @@
+# import aiohttp
+# from Flask.endpoints import url_R_pt
+
+# async def PanTiltMoving(xDelta,yDelta):
+
+#     pan_angle += xDelta // 45
+#     tilt_angle += yDelta // 45
+
+#     pan_angle = max(-90, min(90, pan_angle))
+#     tilt_angle = max(5, min(90, tilt_angle))
+
+#     data = {"pan": pan_angle, "tilt": tilt_angle}
+#     async with aiohttp.ClientSession() as session:
+#         async with session.post(url_R_pt, json=data) as response:
+#             if response.status == 200:
+#                 # print("Pan-Tilt command sent successfully", (pan_angle, tilt_angle))
+#                 pass
+#             else:
+#                 print("Failed to send Pan-Tilt command")
+#     # pass
+
+
 import aiohttp
 from Flask.endpoints import url_R_pt
 
-async def PanTiltMoving(pan_angle,tilt_angle):
-    data = {"pan": pan_angle, "tilt": tilt_angle}
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url_R_pt, json=data) as response:
-            if response.status == 200:
-                # print("Pan-Tilt command sent successfully", (pan_angle, tilt_angle))
-                pass
-            else:
-                print("Failed to send Pan-Tilt command")
-    # pass
+class PanTiltController:
+    def __init__(self):
+        self.pan_angle = 0
+        self.tilt_angle = 45
 
+    async def move(self, xDelta, yDelta):
+        self.pan_angle += xDelta // 45
+        self.tilt_angle += yDelta // 45
+
+        self.pan_angle = max(-90, min(90, self.pan_angle))
+        self.tilt_angle = max(5, min(90, self.tilt_angle))
+
+        print(self.pan_angle,self.tilt_angle)
+        
+        # data = {"pan": self.pan_angle, "tilt": self.tilt_angle}
+        # async with aiohttp.ClientSession() as session:
+        #     async with session.post(url_R_pt, json=data) as response:
+        #         if response.status == 200:
+        #             pass
+        #         else:
+        #             print("Failed to send Pan-Tilt command")
+
+PanTiltMoving = PanTiltController()

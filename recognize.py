@@ -304,7 +304,7 @@ def tracking(detector, args):
 
         cv2.imshow("Face Recognition", tracking_image)
 
-        asyncio.run(MobileFeed(tracking_image))
+        # asyncio.run(MobileFeed(tracking_image))
 
         # Check for user exit input
         ch = cv2.waitKey(1)
@@ -317,8 +317,8 @@ def tracking(detector, args):
 is_found=False
 def recognize():
 
-    AngleX=0
-    AngleY=70
+    # AngleX=0
+    # AngleY=70
     general_id=None
     # global SearchingCond
     # global chosenName_bymobile
@@ -326,8 +326,8 @@ def recognize():
     global is_found
     # asyncio.run(PanTiltMoving(0,60))
     threshold = 7
-    prev_xTrack = None
-    prev_yTrack = None
+    prev_xDelta = None
+    prev_yDelta = None
 
     """Face recognition in a separate thread."""
     while True:
@@ -367,13 +367,7 @@ def recognize():
                         deltaX=face_centerX-(640//2)
                         deltaY=face_centerY-(480//2)
 
-                        AngleX += deltaX // 45
-                        AngleY += deltaY // 45
-
-                        AngleX = max(-90, min(90, AngleX))
-                        AngleY = max(5, min(90, AngleY))
-
-                        id_face_mapping[tracking_ids[i]]=[caption[0], caption[1], face_id, round(Distance,2), AngleX,AngleY,caption[2],deltaX,deltaY]
+                        id_face_mapping[tracking_ids[i]]=[caption[0], caption[1], face_id, round(Distance,2), deltaX,deltaY,caption[2]]
                         # print(id_face_mapping)
 
                         # Priority choosing for known faces only
@@ -391,20 +385,20 @@ def recognize():
                         print("Current IDs in frame: ", current_ids)
 
                         # Post current_ids to Flask Station
-                        asyncio.run(frameIDs(current_ids))
+                        # asyncio.run(frameIDs(current_ids))
 
                         if is_known_face and chosen_id_bymobile is None:
-                            xTrack=real_time_ids[general_id][4]
-                            yTrack=real_time_ids[general_id][5]
+                            xDelta=real_time_ids[general_id][4]
+                            yDelta=real_time_ids[general_id][5]
                             zTrack=real_time_ids[general_id][3]
-                            xdelt=real_time_ids[general_id][7]
-                            ydelt=real_time_ids[general_id][8]
+                            
                             # asyncio.run(Attack(xdelt,ydelt,zTrack))
-                            # asyncio.run(PanTiltMoving(xTrack,yTrack))
-                            #Only call PanTiltMoving if the change exceeds the threshold
-                            # if prev_xTrack is None or prev_yTrack is None or abs(xTrack - prev_xTrack) > threshold or abs(yTrack - prev_yTrack) > threshold:
-                            #     asyncio.run(PanTiltMoving(xTrack, yTrack))
-                            #     prev_xTrack, prev_yTrack = xTrack, yTrack
+                            # asyncio.run(PanTiltMoving.move(xDelta,yDelta))
+
+                            # Only call PanTiltMoving if the change exceeds the threshold
+                            if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
+                                asyncio.run(PanTiltMoving.move(xDelta,yDelta))
+                            #     prev_xDelta, prev_yDelta = xDelta, yDelta
                             print('min_id: ',min_id,', general_id: ',general_id)
 
                         elif isinstance(chosen_id_bymobile, int): #as chosen id could be not none but 's'
@@ -415,14 +409,12 @@ def recognize():
                                     break
 
                             if chosen_general_id is not None:
-                                xTrack = real_time_ids[chosen_general_id][4]
-                                yTrack = real_time_ids[chosen_general_id][5]
+                                # xDelta = real_time_ids[chosen_general_id][4]
+                                # yDelta = real_time_ids[chosen_general_id][5]
                                 zTrack = real_time_ids[chosen_general_id][3]
-                                xdelt = real_time_ids[chosen_general_id][7]
-                                ydelt = real_time_ids[chosen_general_id][8]
                                 # asyncio.run(Attack(xdelt,ydelt,zTrack))
-                                # asyncio.run(Attack(xTrack, yTrack, zTrack))
-                                # asyncio.run(PanTiltMoving(xTrack, yTrack))
+                                # asyncio.run(Attack(xDelta, yDelta, zTrack))
+                                # asyncio.run(PanTiltMoving(xDelta, yDelta))
                                 print('chosen_id_bymobile: ',chosen_id_bymobile,', chosen_general_id: ', chosen_general_id)
                             else:
                                 print(f"Chosen ID {chosen_id_bymobile} not found in real_time_ids")
@@ -439,14 +431,12 @@ def recognize():
                                     break
 
                             if chosenName_general_id is not None:
-                                xTrack = real_time_ids[chosenName_general_id][4]
-                                yTrack = real_time_ids[chosenName_general_id][5]
+                                # xDelta = real_time_ids[chosenName_general_id][4]
+                                # yDelta = real_time_ids[chosenName_general_id][5]
                                 zTrack = real_time_ids[chosenName_general_id][3]
-                                xdelt = real_time_ids[chosenName_general_id][7]
-                                ydelt = real_time_ids[chosenName_general_id][8]
                                 # asyncio.run(Attack(xdelt,pan,zTrack))
-                                # asyncio.run(Attack(xTrack, yTrack, zTrack))
-                                # asyncio.run(PanTiltMoving(xTrack, yTrack))
+                                # asyncio.run(Attack(xDelta, yDelta, zTrack))
+                                # asyncio.run(PanTiltMoving(xDelta, yDelta))
                                 print('chosenName_bymobile: ',chosenName_bymobile,', chosenName_general_id: ', chosenName_general_id)
                             else:
                                 print(f"Chosen Name {chosenName_bymobile} not found in real_time_ids yet")
@@ -490,11 +480,12 @@ async def SearchingAlgorithm(): # need to be edited
         if is_found:
             print("is found")
             await SendNotifications('f') # send notification
-            ResetID() # to stop fetching id / executing search algo.
+            await ResetID() # to stop fetching id / executing search algo.
             return
 
         elif not SearchingCond:
             print("process is killed")
+            await ResetName()
             return
 
         # await Rotate(180)
@@ -509,11 +500,12 @@ async def SearchingAlgorithm(): # need to be edited
         if is_found:
             print("is found")
             await SendNotifications('f') # send notification
-            ResetID()
+            await ResetID()
             return
         
         elif not SearchingCond:
             print("process is killed")
+            await ResetName()
             return
 
         # await Rotate(180)
