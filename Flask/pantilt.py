@@ -44,5 +44,21 @@ class PanTiltController:
         #             pass
         #         else:
         #             print("Failed to send Pan-Tilt command")
+        # return self.pan_angle
+
+    async def order(self, pan, tilt):
+
+        self.pan_angle = max(-90, min(90, pan))
+        self.tilt_angle = max(5, min(90, tilt))
+
+        print(self.pan_angle,self.tilt_angle)
+        
+        # data = {"pan": self.pan_angle, "tilt": self.tilt_angle}
+        # async with aiohttp.ClientSession() as session:
+        #     async with session.post(url_R_pt, json=data) as response:
+        #         if response.status == 200:
+        #             pass
+        #         else:
+        #             print("Failed to send Pan-Tilt command")
 
 PanTiltMoving = PanTiltController()

@@ -391,14 +391,11 @@ def recognize():
                             xDelta=real_time_ids[general_id][4]
                             yDelta=real_time_ids[general_id][5]
                             zTrack=real_time_ids[general_id][3]
-                            
                             # asyncio.run(Attack(xdelt,ydelt,zTrack))
-                            # asyncio.run(PanTiltMoving.move(xDelta,yDelta))
 
-                            # Only call PanTiltMoving if the change exceeds the threshold
                             if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
                                 asyncio.run(PanTiltMoving.move(xDelta,yDelta))
-                            #     prev_xDelta, prev_yDelta = xDelta, yDelta
+                                prev_xDelta, prev_yDelta = xDelta, yDelta
                             print('min_id: ',min_id,', general_id: ',general_id)
 
                         elif isinstance(chosen_id_bymobile, int): #as chosen id could be not none but 's'
@@ -412,9 +409,13 @@ def recognize():
                                 # xDelta = real_time_ids[chosen_general_id][4]
                                 # yDelta = real_time_ids[chosen_general_id][5]
                                 zTrack = real_time_ids[chosen_general_id][3]
+
+                                if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
+                                    asyncio.run(PanTiltMoving.move(xDelta,yDelta))
+                                    prev_xDelta, prev_yDelta = xDelta, yDelta
+
                                 # asyncio.run(Attack(xdelt,ydelt,zTrack))
                                 # asyncio.run(Attack(xDelta, yDelta, zTrack))
-                                # asyncio.run(PanTiltMoving(xDelta, yDelta))
                                 print('chosen_id_bymobile: ',chosen_id_bymobile,', chosen_general_id: ', chosen_general_id)
                             else:
                                 print(f"Chosen ID {chosen_id_bymobile} not found in real_time_ids")
@@ -427,7 +428,6 @@ def recognize():
                                 if chosenName_bymobile == real_time_data[0]:
                                     chosenName_general_id = track_id
                                     is_found=True
-                                    print("is found (loop)")
                                     break
 
                             if chosenName_general_id is not None:
@@ -436,7 +436,9 @@ def recognize():
                                 zTrack = real_time_ids[chosenName_general_id][3]
                                 # asyncio.run(Attack(xdelt,pan,zTrack))
                                 # asyncio.run(Attack(xDelta, yDelta, zTrack))
-                                # asyncio.run(PanTiltMoving(xDelta, yDelta))
+                                if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
+                                    asyncio.run(PanTiltMoving.move(xDelta,yDelta))
+                                    prev_xDelta, prev_yDelta = xDelta, yDelta
                                 print('chosenName_bymobile: ',chosenName_bymobile,', chosenName_general_id: ', chosenName_general_id)
                             else:
                                 print(f"Chosen Name {chosenName_bymobile} not found in real_time_ids yet")
@@ -457,24 +459,22 @@ def recognize():
 
     # cv2.destroyAllWindows()
 
-pan=0
 async def SearchingAlgorithm(): # need to be edited
     # global is_found
     # global SearchingCond
-    global pan
     print('Start Process of Searching')
     while SearchingCond:
         await asyncio.sleep(1)
         pan=-90
         tilt=45
         print('pan= -90')
-        # await PanTiltMoving(pan,tilt)
+        await PanTiltMoving.order(pan,tilt)
         await asyncio.sleep(1)
 
         while pan<90 and not is_found and SearchingCond:
             pan=pan+45 
             print('pan++ =',pan)
-            # await PanTiltMoving(pan,tilt)
+            await PanTiltMoving.order(pan,tilt)
             await asyncio.sleep(2)
 
         if is_found:
@@ -494,7 +494,7 @@ async def SearchingAlgorithm(): # need to be edited
         while pan>-90 and not is_found and SearchingCond:
             pan=pan-45 
             print('pan-- =',pan)
-            # await PanTiltMoving(pan,tilt)
+            await PanTiltMoving.order(pan,tilt)
             await asyncio.sleep(2)
 
         if is_found:
@@ -512,7 +512,7 @@ async def SearchingAlgorithm(): # need to be edited
 
         await asyncio.sleep(2)
         print("Searching Process finished without finding any faces")
-        # await PanTiltMoving(0,45)
+        await PanTiltMoving.order(0,45)
         await SendNotifications('x') # send notification
         await ResetID()
         await ResetName()
