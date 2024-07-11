@@ -11,7 +11,6 @@ import aiohttp
 from face_alignment.alignment import norm_crop
 
 from face_detection.scrfd.detector import SCRFD
-# from face_detection.yolov5_face.detector import Yolov5Face
 
 from face_recognition.arcface.model import iresnet_inference
 from face_recognition.arcface.utils import compare_encodings, read_features
@@ -19,16 +18,12 @@ from face_recognition.arcface.utils import compare_encodings, read_features
 from face_tracking.tracker.byte_tracker import BYTETracker
 from face_tracking.tracker.visualize import plot_tracking
 
-from Flask.id import frameIDs,SearchingCond,ResetID,ResetName
-from Flask.car import Rotate,Attack
+from Flask.id import frameIDs,SearchingCond,ResetID
+from Flask.car import RobotControl
 from Flask.pantilt import PanTiltMoving
 from Flask.mobilefeed import MobileFeed
 from Flask.notification import SendNotifications
 from Flask.endpoints import url_chs_id,url_chs_nm,url_R_feed
-# from test_frcnn import format_img,get_real_coordinates,bbox_threshold, model_classifier,model_rpn,model_classifier_only,Model,class_mapping,C
-# from keras_frcnn import roi_helpers
-# from keras import backend as K
-
 
 
 # Device configuration
@@ -50,7 +45,6 @@ real_time_ids={}
 
 
 chosen_id_bymobile=None # remember to set this to none at the end, would be sent to mobile first so he can chooose from the current ids, so it avoids choosing unavailable id and making an error.
-chosenName_bymobile=None
 
 # Load precomputed face features and names
 images_names, images_embs = read_features(feature_path="./datasets/face_features/feature")
@@ -107,7 +101,7 @@ def Cal_Face_width(image):
         face_width = w
     return face_width
 
-ref_image = cv2.imread("ref_image.png")
+ref_image = cv2.imread("ref_image.jpg")
 ref_image_face_width = Cal_Face_width(ref_image)
 focal_length_found = focal_length(KNOWN_DISTANCE, KNOWN_WIDTH, ref_image_face_width)
 
@@ -155,7 +149,7 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
             tracking_bboxes.append([x1, y1, x1 + w, y1 + h])
             tracking_tlwhs.append(tlwh)
             tracking_scores.append(t.score)
-            tracking_ids.append(tid)      
+            tracking_ids.append(tid)
 
     tracking_image = plot_tracking(
         img_info["raw_img"],
@@ -165,8 +159,6 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
         frame_id=frame_id + 1,
         fps=fps,
     )
-    # else:
-    #     tracking_image = img_info["raw_img"]
 
     data_mapping["raw_image"] = img_info["raw_img"]
     data_mapping["detection_bboxes"] = bboxes
@@ -284,9 +276,7 @@ def tracking(detector, args):
     tracker = BYTETracker(args=args, frame_rate=30)
     frame_id = 0
 
-    cap = cv2.VideoCapture(0)
-    # img = cv2.imread('111.png')
-    
+    cap = cv2.VideoCapture(0)    
     # cap = cv2.VideoCapture(url_R_feed)
 
     while True:
@@ -316,16 +306,12 @@ def tracking(detector, args):
 
 is_found=False
 def recognize():
-
-    # AngleX=0
-    # AngleY=70
     general_id=None
     # global SearchingCond
-    # global chosenName_bymobile
     # global chosen_id_bymobile
     global is_found
-    # asyncio.run(PanTiltMoving(0,60))
-    threshold = 7
+    asyncio.run(PanTiltMoving.order(0,45))
+    threshold = 5
     prev_xDelta = None
     prev_yDelta = None
 
@@ -364,11 +350,10 @@ def recognize():
                         face_centerX= tracking_bboxes[i][0] + (face_width_in_frame/2)
                         face_centerY = tracking_bboxes[i][1] +(face_height_in_frame/2)
 
-                        deltaX=face_centerX-(640//2)
-                        deltaY=face_centerY-(480//2)
+                        deltaX=int(face_centerX-(640//2))
+                        deltaY=int(face_centerY-(480//2))
 
                         id_face_mapping[tracking_ids[i]]=[caption[0], caption[1], face_id, round(Distance,2), deltaX,deltaY,caption[2]]
-                        # print(id_face_mapping)
 
                         # Priority choosing for known faces only
                         min_id=float('inf')
@@ -385,18 +370,18 @@ def recognize():
                         print("Current IDs in frame: ", current_ids)
 
                         # Post current_ids to Flask Station
-                        # asyncio.run(frameIDs(current_ids))
+                        asyncio.run(frameIDs(current_ids))
+
 
                         if is_known_face and chosen_id_bymobile is None:
                             xDelta=real_time_ids[general_id][4]
                             yDelta=real_time_ids[general_id][5]
-                            zTrack=real_time_ids[general_id][3]
-                            # asyncio.run(Attack(xdelt,ydelt,zTrack))
 
-                            if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
-                                asyncio.run(PanTiltMoving.move(xDelta,yDelta))
-                                prev_xDelta, prev_yDelta = xDelta, yDelta
+                            # if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
+                                # asyncio.run(PanTiltMoving.move(xDelta,yDelta))
+                                # prev_xDelta, prev_yDelta = xDelta, yDelta
                             print('min_id: ',min_id,', general_id: ',general_id)
+
 
                         elif isinstance(chosen_id_bymobile, int): #as chosen id could be not none but 's'
                             chosen_general_id = None
@@ -406,43 +391,18 @@ def recognize():
                                     break
 
                             if chosen_general_id is not None:
-                                # xDelta = real_time_ids[chosen_general_id][4]
-                                # yDelta = real_time_ids[chosen_general_id][5]
+                                xDelta = real_time_ids[chosen_general_id][4]
+                                yDelta = real_time_ids[chosen_general_id][5]
                                 zTrack = real_time_ids[chosen_general_id][3]
 
                                 if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
-                                    asyncio.run(PanTiltMoving.move(xDelta,yDelta))
+                                    asyncio.run(PanTiltMoving.ytracking(xDelta,yDelta))
                                     prev_xDelta, prev_yDelta = xDelta, yDelta
 
-                                # asyncio.run(Attack(xdelt,ydelt,zTrack))
-                                # asyncio.run(Attack(xDelta, yDelta, zTrack))
+                                asyncio.run(RobotControl.attack(xDelta, zTrack))
                                 print('chosen_id_bymobile: ',chosen_id_bymobile,', chosen_general_id: ', chosen_general_id)
                             else:
                                 print(f"Chosen ID {chosen_id_bymobile} not found in real_time_ids")
-
-                        elif chosenName_bymobile:  # Remember to reset the chosen name after finishing the search/attack (make it none at the end of attak function)
-                            print("searching for the name in data")
-                            chosenName_general_id = None
-                            for track_id, real_time_data in real_time_ids.items():
-                                print("looping")
-                                if chosenName_bymobile == real_time_data[0]:
-                                    chosenName_general_id = track_id
-                                    is_found=True
-                                    break
-
-                            if chosenName_general_id is not None:
-                                # xDelta = real_time_ids[chosenName_general_id][4]
-                                # yDelta = real_time_ids[chosenName_general_id][5]
-                                zTrack = real_time_ids[chosenName_general_id][3]
-                                # asyncio.run(Attack(xdelt,pan,zTrack))
-                                # asyncio.run(Attack(xDelta, yDelta, zTrack))
-                                if prev_xDelta is None or prev_yDelta is None or abs(xDelta - prev_xDelta) > threshold or abs(yDelta - prev_yDelta) > threshold:
-                                    asyncio.run(PanTiltMoving.move(xDelta,yDelta))
-                                    prev_xDelta, prev_yDelta = xDelta, yDelta
-                                print('chosenName_bymobile: ',chosenName_bymobile,', chosenName_general_id: ', chosenName_general_id)
-                            else:
-                                print(f"Chosen Name {chosenName_bymobile} not found in real_time_ids yet")
-
                         print("-----------------------------------------")
 
                     detection_bboxes = np.delete(detection_bboxes, j, axis=0)
@@ -451,33 +411,30 @@ def recognize():
 
                     break
 
-        if SearchingCond and not is_found:
-            asyncio.run(fetch_chosen_name())
+        if SearchingCond:
             asyncio.run(SearchingAlgorithm())
-        # print("Waiting for a person...")
-        # pass
+            # pass
 
     # cv2.destroyAllWindows()
 
 async def SearchingAlgorithm(): # need to be edited
-    # global is_found
-    # global SearchingCond
+    global SearchingCond
     print('Start Process of Searching')
     while SearchingCond:
         await asyncio.sleep(1)
         pan=-90
         tilt=45
         print('pan= -90')
-        await PanTiltMoving.order(pan,tilt)
+        # await PanTiltMoving.order(pan,tilt)
         await asyncio.sleep(1)
 
-        while pan<90 and not is_found and SearchingCond:
+        while pan<90 and data_mapping["tracking_bboxes"]== [] and SearchingCond:
             pan=pan+45 
             print('pan++ =',pan)
-            await PanTiltMoving.order(pan,tilt)
+            # await PanTiltMoving.order(pan,tilt)
             await asyncio.sleep(2)
 
-        if is_found:
+        if data_mapping["tracking_bboxes"]!= []:
             print("is found")
             await SendNotifications('f') # send notification
             await ResetID() # to stop fetching id / executing search algo.
@@ -485,19 +442,18 @@ async def SearchingAlgorithm(): # need to be edited
 
         elif not SearchingCond:
             print("process is killed")
-            await ResetName()
             return
 
-        # await Rotate(180)
+        await RobotControl.rotate(180)
         await asyncio.sleep(4)
         
-        while pan>-90 and not is_found and SearchingCond:
+        while pan>-90 and data_mapping["tracking_bboxes"]== [] and SearchingCond:
             pan=pan-45 
             print('pan-- =',pan)
-            await PanTiltMoving.order(pan,tilt)
+            # await PanTiltMoving.order(pan,tilt)
             await asyncio.sleep(2)
 
-        if is_found:
+        if data_mapping["tracking_bboxes"]!= []:
             print("is found")
             await SendNotifications('f') # send notification
             await ResetID()
@@ -505,18 +461,16 @@ async def SearchingAlgorithm(): # need to be edited
         
         elif not SearchingCond:
             print("process is killed")
-            await ResetName()
             return
 
-        # await Rotate(180)
+        await RobotControl.rotate(180)
 
         await asyncio.sleep(2)
         print("Searching Process finished without finding any faces")
-        await PanTiltMoving.order(0,45)
+        # await PanTiltMoving.order(0,45)
         await SendNotifications('x') # send notification
         await ResetID()
-        await ResetName()
-        # SearchingCond=False
+        SearchingCond=False
         return 
 
 async def fetch_chosen_id():
@@ -528,10 +482,8 @@ async def fetch_chosen_id():
                     data = await response.json()
                     if data['id']=='s':
                         SearchingCond=True
-                        # print("Searching Cond.")
                     else:
                         SearchingCond=False
-                        is_found=False
                         chosen_id_bymobile = int(data['id'])
                         if chosen_id_bymobile==0:
                             chosen_id_bymobile=None #at the end of attack, ai would post (0) to /chosen_id
@@ -547,32 +499,6 @@ async def continuously_fetch_chosen_id(interval=2):
     while True:
         await fetch_chosen_id()
         await asyncio.sleep(interval)
-
-async def fetch_chosen_name():
-    global chosenName_bymobile,is_found
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url_chs_nm) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    chosenName_bymobile = data['name']
-                    is_found=False
-                    if chosenName_bymobile==0: chosenName_bymobile=None #at the end of attack, ai would post (0) to /chosen_name
-                    print("Fetched chosen Name:", chosenName_bymobile)
-                    return
-                else:
-                    # print(f"Failed to fetch chosen Name: {response.status}")
-                    pass
-    except Exception as e:
-        print(f"Error fetching chosen Name: {e}")
-
-# def run_searching_algorithm():
-#     """
-#     Run the searching algorithm in an asyncio event loop within a separate thread.
-#     """
-#     loop = asyncio.new_event_loop()
-#     asyncio.set_event_loop(loop)
-#     loop.run_until_complete(SearchingAlgorithm())
 
 def main():
     """Main function to start face tracking and recognition threads."""
@@ -597,13 +523,6 @@ def main():
     # Run the loop in a separate thread
     loop_thread = threading.Thread(target=loop.run_forever)
     loop_thread.start()
-
-    # while thread_recognize.is_alive():
-    #     if SearchingCond and not is_found:
-    #         searching_thread = threading.Thread(target=run_searching_algorithm)
-    #         searching_thread.start()
-    #         searching_thread.join()
-    # thread_recognize.join()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-R=11
+R=12
 PC=2
 
 # RaspberryPi Server

@@ -24,14 +24,3 @@ async def ResetID():
                 pass
             else:
                 print("Failed to Reset the ID")
-
-
-async def ResetName():
-    data = {"name": 0}
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url_chs_nm_W, json=data) as response:
-            if response.status == 200:
-                print("Reset the Name")
-                pass
-            else:
-                print("Failed to Reset the Name")
